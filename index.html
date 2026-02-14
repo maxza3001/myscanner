@@ -2,8 +2,18 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Super Scanner (Local Edition)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    
+    <!-- PWA Settings (ส่วนที่ทำให้ซ่อนแถบ URL เมื่อ Add to Home Screen) -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ScannerPro">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="theme-color" content="#ffffff">
+    <link rel="manifest" href='data:application/json,{"name":"Scanner Pro","short_name":"Scanner","start_url":".","display":"standalone","background_color":"#ffffff","theme_color":"#2563eb"}'>
+    
+    <title>Super Scanner</title>
+    
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Font Awesome -->
@@ -17,7 +27,11 @@
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;600&display=swap');
-        body { font-family: 'Sarabun', sans-serif; }
+        body { 
+            font-family: 'Sarabun', sans-serif; 
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
+        }
         .tab-active { border-bottom: 3px solid #2563eb; color: #2563eb; }
         #reader video { border-radius: 0.75rem; object-fit: cover; }
         #reader__scan_region { background: rgba(0,0,0,0.1) !important; }
@@ -25,12 +39,15 @@
         @keyframes shake { 0%, 100% { transform: translateX(-50%) translateX(0); } 20%, 60% { transform: translateX(-50%) translateX(-5px); } 40%, 80% { transform: translateX(-50%) translateX(5px); } }
         .animate-shake { animation: shake 0.4s ease-in-out; }
         .whitespace-pre-wrap { white-space: pre-wrap; word-break: break-all; }
+        
+        /* ซ่อน Scrollbar */
+        ::-webkit-scrollbar { display: none; }
     </style>
 </head>
-<body class="bg-gray-100 h-screen flex flex-col">
+<body class="bg-gray-100 h-screen flex flex-col overflow-hidden">
 
     <!-- Header -->
-    <header class="bg-white shadow-md p-4 sticky top-0 z-50 flex justify-between items-center">
+    <header class="bg-white shadow-sm p-4 sticky top-0 z-50 flex justify-between items-center border-b">
         <div class="w-10 text-blue-600">
              <i class="fas fa-qrcode text-lg"></i>
         </div>
@@ -43,7 +60,7 @@
     </header>
 
     <!-- Navigation Tabs -->
-    <nav class="bg-white border-b flex justify-around p-2 text-xs sticky top-14 z-40">
+    <nav class="bg-white border-b flex justify-around p-2 text-xs z-40">
         <button onclick="switchTab('scan')" id="tab-scan" class="tab-active flex-1 py-3 font-bold text-center">
             <i class="fas fa-expand-alt mb-1 block text-base"></i> สแกนเดี่ยว
         </button>
@@ -56,7 +73,7 @@
     </nav>
 
     <!-- Main Content -->
-    <main class="flex-grow p-4 overflow-y-auto pb-24">
+    <main class="flex-grow p-4 overflow-y-auto">
         <div id="notification" class="hidden fixed top-24 left-1/2 transform -translate-x-1/2 text-white px-6 py-2 rounded-full shadow-2xl z-[100] transition-all duration-300 font-bold text-sm"></div>
 
         <!-- Scanner View -->
@@ -79,6 +96,12 @@
                     </div>
                 </div>
                 <div class="text-lg font-mono text-gray-900 leading-tight font-semibold whitespace-pre-wrap bg-gray-50 p-4 rounded-xl border border-gray-100" id="scan-result-text">-</div>
+            </div>
+            
+            <!-- PWA Instruction -->
+            <div id="pwa-install-msg" class="bg-blue-50 p-4 rounded-xl border border-blue-100 text-xs text-blue-700">
+                <p class="font-bold mb-1"><i class="fas fa-mobile-alt mr-1"></i> วิธีซ่อนแถบ URL:</p>
+                <p>กดปุ่ม "แชร์" (iOS) หรือ "จุด 3 จุด" (Android) แล้วเลือก "เพิ่มไปยังหน้าจอโฮม" เพื่อใช้งานแบบแอปเต็มหน้าจอ</p>
             </div>
         </div>
 
@@ -127,7 +150,12 @@
         let cameraId = null;
         const DELIMITER = '\n';
 
-        window.addEventListener('load', initApp);
+        window.addEventListener('load', () => {
+            initApp();
+            if (window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches) {
+                document.getElementById('pwa-install-msg').classList.add('hidden');
+            }
+        });
 
         async function initApp() {
             try {
@@ -148,11 +176,12 @@
             if (html5QrCode) return;
             html5QrCode = new Html5Qrcode("reader");
             const config = { 
-                fps: 20, 
+                fps: 25, 
                 qrbox: (w, h) => {
-                    const size = Math.floor(Math.min(w, h) * 0.75);
+                    const size = Math.floor(Math.min(w, h) * 0.7);
                     return { width: size, height: size };
-                }
+                },
+                aspectRatio: 1.0
             };
             try {
                 await html5QrCode.start(cameraId, config, onScanSuccess);
@@ -196,8 +225,11 @@
 
         function switchTab(tab) {
             currentTab = tab;
-            document.querySelectorAll('nav button').forEach(btn => btn.className = "flex-1 py-3 font-bold text-gray-400 text-center");
+            document.querySelectorAll('nav button').forEach(btn => {
+                btn.className = "flex-1 py-3 font-bold text-gray-400 text-center";
+            });
             document.getElementById(`tab-${tab}`).className = "tab-active flex-1 py-3 font-bold text-center";
+            
             document.getElementById('view-scan').style.display = tab === 'scan' ? 'block' : 'none';
             document.getElementById('view-batch').style.display = tab === 'batch' ? 'block' : 'none';
             document.getElementById('view-generate').style.display = tab === 'generate' ? 'block' : 'none';
@@ -262,7 +294,14 @@
             const list = document.getElementById('batch-list');
             document.getElementById('batch-count').innerText = batchItems.length;
             if (batchItems.length === 0) { list.innerHTML = '<li class="p-8 text-center text-gray-400 text-sm italic">ยังไม่มีรายการ</li>'; return; }
-            list.innerHTML = batchItems.map((item, idx) => `<li class="p-4 flex justify-between items-center"><div class="min-w-0 pr-4"><div class="text-[10px] text-gray-400 font-black mb-1">ลำดับ #${idx+1}</div><div class="text-xs font-mono truncate font-bold">${item}</div></div><button onclick="removeBatchItem(${idx})" class="text-red-400 bg-red-50 p-2 rounded-lg"><i class="fas fa-trash-alt"></i></button></li>`).join('');
+            list.innerHTML = batchItems.map((item, idx) => `
+                <li class="p-4 flex justify-between items-center">
+                    <div class="min-w-0 pr-4">
+                        <div class="text-[10px] text-gray-400 font-black mb-1">ลำดับ #${idx+1}</div>
+                        <div class="text-xs font-mono truncate font-bold">${item}</div>
+                    </div>
+                    <button onclick="removeBatchItem(${idx})" class="text-red-400 bg-red-50 p-2 rounded-lg"><i class="fas fa-trash-alt"></i></button>
+                </li>`).join('');
         }
 
         function removeBatchItem(idx) { batchItems.splice(idx, 1); updateBatchList(); }
@@ -317,14 +356,11 @@
 
         function downloadCode() { 
             const canvas = document.querySelector('#qrcode-container canvas'); 
-            const barcodeImg = document.getElementById('barcode-container');
             if(canvas) {
                 const link = document.createElement('a');
                 link.download = `QR_Code_${Date.now()}.png`;
                 link.href = canvas.toDataURL();
                 link.click();
-            } else if (!barcodeImg.classList.contains('hidden')) {
-                showNotification('กรุณาแคปหน้าจอเพื่อบันทึก Barcode', 'bg-gray-700');
             }
         }
     </script>
