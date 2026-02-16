@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     
-    <!-- PWA Settings (ส่วนที่ทำให้ซ่อนแถบ URL เมื่อ Add to Home Screen) -->
+    <!-- PWA Settings -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="ScannerPro">
@@ -114,9 +114,11 @@
             <ul id="batch-list" class="bg-white rounded-2xl shadow-sm divide-y divide-gray-50 max-h-72 overflow-y-auto mb-6 border border-gray-100">
                 <li class="p-8 text-center text-gray-400 text-sm italic">ยังไม่มีรายการสแกน</li>
             </ul>
-            <button onclick="generateMasterCode()" class="w-full bg-blue-600 text-white py-4 rounded-2xl shadow-xl font-black text-lg active:scale-95 transition">
-                สร้าง Master QR (แยกบรรทัด)
-            </button>
+            <div class="bg-blue-50 p-3 rounded-xl border border-blue-100 mb-4">
+                <p class="text-[10px] text-blue-700 font-bold text-center uppercase tracking-widest italic">
+                    <i class="fas fa-sync-alt animate-spin-slow mr-1"></i> ระบบจะจำประวัติไว้แม้ออกจากแอป
+                </p>
+            </div>
         </div>
 
         <!-- Generate View Content -->
@@ -149,13 +151,33 @@
         let isTorchOn = false;
         let cameraId = null;
         const DELIMITER = '\n';
+        const STORAGE_KEY = 'scanner_pro_batch_items';
 
         window.addEventListener('load', () => {
+            loadSavedData(); // โหลดข้อมูลที่บันทึกไว้
             initApp();
             if (window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches) {
                 document.getElementById('pwa-install-msg').classList.add('hidden');
             }
         });
+
+        // ฟังก์ชันโหลดข้อมูลจาก LocalStorage
+        function loadSavedData() {
+            const saved = localStorage.getItem(STORAGE_KEY);
+            if (saved) {
+                try {
+                    batchItems = JSON.parse(saved);
+                    updateBatchList();
+                } catch (e) {
+                    console.error("Error loading saved data", e);
+                }
+            }
+        }
+
+        // ฟังก์ชันบันทึกข้อมูลลง LocalStorage
+        function saveToStorage() {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(batchItems));
+        }
 
         async function initApp() {
             try {
@@ -216,11 +238,16 @@
                 return;
             }
             batchItems.push(text);
+            saveToStorage(); // บันทึกลง Storage ทันที
             updateBatchList();
+            
+            // อัปเดต QR Code ในหน้าสร้างโค้ดทันทีแบบ Real-time
+            renderQRCode(batchItems.join(DELIMITER), false); 
+            
             playSuccessChime();
             showNotification(`บันทึกรหัสใหม่แล้ว`, 'bg-green-600');
             isScanning = false;
-            setTimeout(() => isScanning = true, 1000);
+            setTimeout(() => isScanning = true, 800);
         }
 
         function switchTab(tab) {
@@ -237,6 +264,10 @@
             if (tab === 'generate') {
                 document.getElementById('scanner-section').classList.add('hidden');
                 if (html5QrCode) html5QrCode.pause();
+                
+                if (batchItems.length > 0 && document.getElementById('manual-input').value === "") {
+                    renderQRCode(batchItems.join(DELIMITER), true);
+                }
             } else {
                 document.getElementById('scanner-section').classList.remove('hidden');
                 if (html5QrCode) html5QrCode.resume();
@@ -304,23 +335,47 @@
                 </li>`).join('');
         }
 
-        function removeBatchItem(idx) { batchItems.splice(idx, 1); updateBatchList(); }
-        function clearBatch() { if(confirm('ต้องการล้างข้อมูลสะสมทั้งหมดหรือไม่?')) { batchItems = []; updateBatchList(); } }
+        function removeBatchItem(idx) { 
+            batchItems.splice(idx, 1); 
+            saveToStorage(); // อัปเดต Storage หลังการลบ
+            updateBatchList(); 
+            if (batchItems.length > 0) {
+                renderQRCode(batchItems.join(DELIMITER), false);
+            } else {
+                document.getElementById('generated-output').classList.add('hidden');
+            }
+        }
+        
+        function clearBatch() { 
+            if(confirm('ต้องการล้างข้อมูลสะสมทั้งหมดหรือไม่?')) { 
+                batchItems = []; 
+                saveToStorage(); // อัปเดต Storage
+                updateBatchList(); 
+                document.getElementById('generated-output').classList.add('hidden');
+            } 
+        }
         
         function generateMasterCode() { 
             if (batchItems.length === 0) return showNotification('ไม่มีข้อมูล', 'bg-red-500');
             switchTab('generate'); 
-            renderQRCode(batchItems.join(DELIMITER)); 
+            renderQRCode(batchItems.join(DELIMITER), true); 
         }
 
-        function renderQRCode(text) { 
+        function renderQRCode(text, scrollToView = false) { 
             const container = document.getElementById('qrcode-container'); 
             const barcodeContainer = document.getElementById('barcode-container');
             container.innerHTML = ""; 
             barcodeContainer.classList.add('hidden');
-            document.getElementById('generated-output').classList.remove('hidden'); 
+            
+            const outputArea = document.getElementById('generated-output');
+            outputArea.classList.remove('hidden'); 
             document.getElementById('generated-text-display').innerText = text; 
+            
             new QRCode(container, { text, width: 220, height: 220, correctLevel : QRCode.CorrectLevel.M }); 
+
+            if (scrollToView) {
+                outputArea.scrollIntoView({ behavior: 'smooth' });
+            }
         }
 
         async function checkTorchSupport() { try { const state = await html5QrCode.getTorchState(); if (state !== undefined) document.getElementById('torch-button').classList.remove('hidden'); } catch(e){} }
@@ -343,7 +398,7 @@
         function createManualCode(type) { 
             const val = document.getElementById('manual-input').value; 
             if (!val) return;
-            if (type === 'qr') renderQRCode(val); 
+            if (type === 'qr') renderQRCode(val, true); 
             else { 
                 document.getElementById('qrcode-container').innerHTML = ""; 
                 const bc = document.getElementById('barcode-container');
@@ -351,6 +406,7 @@
                 document.getElementById('generated-output').classList.remove('hidden');
                 document.getElementById('generated-text-display').innerText = val;
                 JsBarcode("#barcode-container", val, { width: 2, height: 80, displayValue: false }); 
+                document.getElementById('generated-output').scrollIntoView({ behavior: 'smooth' });
             } 
         }
 
